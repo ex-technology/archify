@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Order Service",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "layout": { "mode": "grid", "cols": 4, "gapX": 110, "gapY": 80, "cellW": 150, "cellH": 64 },
+  "components": [
+    { "id": "client", "type": "frontend", "label": "Web Client", "sublabel": "React SPA", "row": 1, "col": 0 },
+    { "id": "gateway", "type": "security", "label": "API Gateway", "sublabel": "JWT check", "row": 1, "col": 1 },
+    { "id": "orders", "type": "backend", "label": "Order API", "sublabel": "Node.js", "row": 1, "col": 2 },
+    { "id": "db", "type": "database", "label": "PostgreSQL", "sublabel": "orders", "row": 1, "col": 3 },
+    { "id": "cache", "type": "database", "label": "Redis", "sublabel": "read cache", "row": 0, "col": 2 },
+    { "id": "queue", "type": "messagebus", "label": "Kafka", "sublabel": "order events", "row": 2, "col": 2 },
+    { "id": "mailer", "type": "external", "label": "Email Provider", "row": 2, "col": 3 }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Private network", "wraps": ["orders", "db", "cache", "queue"] }
+  ],
+  "connections": [
+    { "id": "place-order", "from": "client", "to": "gateway", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "forward", "from": "gateway", "to": "orders", "label": "REST", "variant": "emphasis" },
+    { "id": "persist", "from": "orders", "to": "db", "label": "SQL", "variant": "emphasis" },
+    { "id": "lookup", "from": "orders", "to": "cache", "label": "GET", "fromSide": "top", "toSide": "bottom" },
+    { "id": "publish", "from": "orders", "to": "queue", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "notify", "from": "queue", "to": "mailer", "label": "send", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Request path", "items": ["Gateway validates the JWT", "Order API writes to PostgreSQL"] },
+    { "dot": "amber", "title": "Async side effects", "items": ["Order events go to Kafka", "Emails are sent from the queue"] }
+  ]
+}

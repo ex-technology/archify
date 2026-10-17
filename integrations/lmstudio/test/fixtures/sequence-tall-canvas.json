@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Webリクエスト・キャッシュフロー",
+    "quality_profile": "showcase",
+    "column_fit": "spread"
+  },
+  "participants": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "ブラウザ",
+      "sublabel": "クライアント"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "APIサーバー",
+      "sublabel": "アプリケーションロジック"
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "分散キャッシュ"
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "メインデータベース"
+    }
+  ],
+  "messages": [
+    {
+      "id": "req-send",
+      "from": "browser",
+      "to": "api",
+      "y": 160,
+      "label": "データリクエスト",
+      "variant": "emphasis"
+    },
+    {
+      "id": "cache-check",
+      "from": "api",
+      "to": "redis",
+      "y": 190,
+      "label": "キャッシュ確認 (GET)",
+      "variant": "default"
+    },
+    {
+      "id": "cache-miss",
+      "from": "redis",
+      "to": "api",
+      "y": 220,
+      "label": "キャッシュミス (null)",
+      "variant": "return"
+    },
+    {
+      "id": "db-query",
+      "from": "api",
+      "to": "postgres",
+      "y": 250,
+      "label": "データ照会 (SELECT)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "db-res",
+      "from": "postgres",
+      "to": "api",
+      "y": 280,
+      "label": "レコード返却",
+      "variant": "return"
+    },
+    {
+      "id": "cache-fill",
+      "from": "api",
+      "to": "redis",
+      "y": 310,
+      "label": "キャッシュ保存 (SET)",
+      "variant": "dashed"
+    },
+    {
+      "id": "final-res",
+      "from": "api",
+      "to": "browser",
+      "y": 340,
+      "label": "レスポンス返却",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api",
+      "from": 165,
+      "to": 335,
+      "type": "backend"
+    },
+    {
+      "participant": "redis",
+      "from": 190,
+      "to": 220,
+      "type": "database"
+    },
+    {
+      "participant": "postgres",
+      "from": 250,
+      "to": 280,
+      "type": "database"
+    },
+    {
+      "participant": "redis",
+      "from": 310,
+      "to": 320,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "キャッシュ戦略",
+      "items": [
+        "Cache-Asideパターンの実装です",
+        "Redisにデータがない場合のみDBへアクセスします",
+        "取得したデータをRedisに書き戻し、次回以降の高速化を図ります"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "パフォーマンスへの影響",
+      "items": [
+        "キャッシュヒット時: Redisのみで完結 (低レイテンシ)",
+        "キャッシュミス時: DBアクセス + キャッシュ書き込みが発生 (高レイテンシ)"
+      ]
+    }
+  ]
+}

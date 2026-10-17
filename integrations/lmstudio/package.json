@@ -1,0 +1,18 @@
+{
+  "name": "archify-lmstudio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generate Archify diagrams with local models served by LM Studio.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "archify-lmstudio": "./bin/archify-lmstudio.mjs",
+    "archify-lmstudio-mcp": "./bin/archify-mcp.mjs"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}
