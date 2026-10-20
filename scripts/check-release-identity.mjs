@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from 'parse5';
 
 import {
   compareSemver,
@@ -78,11 +79,15 @@ function versionLabels(source) {
     .map((match) => match[1]);
 }
 
+const readmeMarkers = {
+  en: { development: 'Current development version:', stable: 'Current stable version:' },
+  zh: { development: '当前开发版本：', stable: '当前稳定版本：' },
+  ja: { development: '現在の開発版:', stable: '現在の安定版:' },
+};
+
 function checkReadme(relativePath, source, version, language, isDevelopment) {
   const badge = `/badge/version-${shieldEscape(version)}-`;
-  const markerLabel = language === 'zh'
-    ? isDevelopment ? '当前开发版本：' : '当前稳定版本：'
-    : isDevelopment ? 'Current development version:' : 'Current stable version:';
+  const markerLabel = readmeMarkers[language][isDevelopment ? 'development' : 'stable'];
   const identity = isDevelopment ? 'development' : 'stable';
   const hasMarker = source.split('\n').some((line) => line.includes(markerLabel) && line.includes(`\`v${version}\``));
   if (!source.includes(badge) || !hasMarker) {
@@ -108,7 +113,24 @@ function checkNoRavenSwitcher(relativePath, source) {
 }
 
 function checkIdentityTemplate(relativePath, source, isDevelopment) {
-  const hasHardcodedVersion = /\b\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\b/.test(source);
+  // SVG path coordinates can resemble SemVer (for example, `4.3.6-3.1`).
+  // Remove only real SVG d attributes, not path-like text inside other
+  // attributes or scripts. Keep the original bytes everywhere else.
+  const pathDataRanges = [];
+  function collectPathData(node) {
+    const location = node.sourceCodeLocation?.attrs?.d;
+    if (node.namespaceURI === 'http://www.w3.org/2000/svg' && node.tagName === 'path' && location) {
+      pathDataRanges.push(location);
+    }
+    for (const child of node.childNodes || []) collectPathData(child);
+    if (node.content) collectPathData(node.content);
+  }
+  collectPathData(parse(source, { sourceCodeLocationInfo: true }));
+  let sourceWithoutPathData = source;
+  for (const { startOffset, endOffset } of pathDataRanges.sort((a, b) => b.startOffset - a.startOffset)) {
+    sourceWithoutPathData = sourceWithoutPathData.slice(0, startOffset) + sourceWithoutPathData.slice(endOffset);
+  }
+  const hasHardcodedVersion = /\b\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\b/.test(sourceWithoutPathData);
   const identity = isDevelopment ? 'development and 开发版' : 'stable and 稳定版';
   const hasIdentity = isDevelopment
     ? /development/i.test(source) && /开发版/.test(source)
@@ -211,10 +233,12 @@ if (hasSupportedVersion) {
   const english = read('README.md');
   const englishMirror = read('README_EN.md');
   const chinese = read('README_ZH.md');
+  const japanese = read('README_JA.md');
   checkReadme('README.md', english, version, 'en', isDevelopment);
   checkReadme('README_EN.md', englishMirror, version, 'en', isDevelopment);
   checkReadme('README_ZH.md', chinese, version, 'zh', isDevelopment);
-  for (const [path, content] of [['README.md', english], ['README_EN.md', englishMirror], ['README_ZH.md', chinese]]) {
+  checkReadme('README_JA.md', japanese, version, 'ja', isDevelopment);
+  for (const [path, content] of [['README.md', english], ['README_EN.md', englishMirror], ['README_ZH.md', chinese], ['README_JA.md', japanese]]) {
     checkNoRavenSwitcher(path, content);
   }
   if (english !== englishMirror) fail('README_EN.md must remain byte-identical to README.md.');

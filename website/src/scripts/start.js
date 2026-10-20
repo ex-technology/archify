@@ -3,8 +3,8 @@
       'use strict';
 
       var DATA = JSON.parse(document.getElementById('start-data').textContent);
-      var KNOWN_TYPES = new Set(['architecture', 'workflow', 'sequence', 'dataflow', 'lifecycle']);
-      var KNOWN_AGENTS = new Set(['cursor', 'codex', 'claude-code', 'opencode']);
+      var KNOWN_TYPES = new Set(Object.keys(DATA));
+      var KNOWN_AGENTS = new Set(['cursor', 'codex', 'claude-code', 'opencode', 'github-copilot']);
       var KNOWN_INPUTS = new Set(['description', 'repository']);
       var KNOWN_SOURCES = new Set(['artifact', 'gallery', 'readme', 'direct']);
       var EVENT_KEY = 'archify.start.events.v1';
@@ -25,7 +25,7 @@
       var includeList = document.getElementById('include-list');
       var proofLink = document.getElementById('proof-link');
       var proofMeta = document.getElementById('proof-meta');
-      var copyStatus = document.getElementById('copy-status');
+      var copyReceipts = new Map();
       var languageButton = document.getElementById('language');
       var agentState = document.getElementById('agent-state');
       var installCommand = document.getElementById('install-command');
@@ -36,7 +36,7 @@
       }
 
       function updateStaticCopy() {
-        document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+        document.documentElement.lang = language === 'zh' ? 'zh-Hans' : 'en';
         document.querySelectorAll('[data-en][data-zh]').forEach(function (element) {
           element.textContent = copyForElement(element);
         });
@@ -87,7 +87,9 @@
           : DATA[type][language].repositoryPrompt;
       }
 
+      var copyAttempt = 0;
       function render() {
+        copyAttempt++;
         language = ArchifySiteLanguage.write(language);
         var recipe = DATA[type];
         var copy = recipe[language];
@@ -119,25 +121,17 @@
           entry.textContent = item;
           return entry;
         }));
-        proofLink.href = 'gallery.html#proof-' + encodeURIComponent(recipe.proof);
+        proofLink.href = ArchifySiteLanguage.page('gallery', '#proof-' + encodeURIComponent(recipe.proof));
         proofMeta.textContent = language === 'zh'
           ? '验证成品 · ' + recipe.presentation.preset + ' · ' + recipe.presentation.motion
           : 'Verified proof · ' + recipe.presentation.preset + ' · ' + recipe.presentation.motion;
-        copyStatus.textContent = '';
+        copyReceipts.forEach(function (receipt, status) {
+          if (receipt.text !== textForStep(receipt.step)) {
+            status.textContent = '';
+            copyReceipts.delete(status);
+          }
+        });
         updateUrl();
-      }
-
-      function fallbackCopy(text) {
-        var area = document.createElement('textarea');
-        area.value = text;
-        area.setAttribute('readonly', '');
-        area.style.position = 'fixed';
-        area.style.opacity = '0';
-        document.body.appendChild(area);
-        area.select();
-        var ok = document.execCommand('copy');
-        area.remove();
-        if (!ok) throw new Error('copy failed');
       }
 
       function starterText() {
@@ -150,19 +144,32 @@
           + (input === 'description' ? '\n\nThen start any new chat and tell ' : '\n\nThen, in your target repository, ask ') + agentName + ':\n' + currentPrompt();
       }
 
-      async function copyText(text, step) {
-        try {
-          if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
-          else fallbackCopy(text);
-          if (step) recordStep(step);
-          copyStatus.textContent = language === 'zh' ? '已复制到剪贴板。' : 'Copied to clipboard.';
-        } catch (_) {
-          copyStatus.textContent = language === 'zh' ? '复制失败，请手动选择文本。' : 'Copy failed. Select the text manually.';
-        }
+      function textForStep(step) {
+        if (step === 'global_install_copy') return installCommand.textContent.trim();
+        if (step === 'project_install_copy') return projectCommand.textContent.trim();
+        if (step === 'prompt_copy') return currentPrompt();
+        return starterText();
+      }
+
+      async function copyText(step, statusId) {
+        var text = textForStep(step);
+        var copyStatus = document.getElementById(statusId);
+        var attempt = ++copyAttempt;
+        copyStatus.textContent = '';
+        copyReceipts.delete(copyStatus);
+        var isCurrent = function () { return attempt === copyAttempt; };
+        var ok = await ArchifyClipboard.copy(text, isCurrent);
+        if (!isCurrent()) return;
+        copyReceipts.set(copyStatus, { text: text, step: step });
+        if (ok && step) recordStep(step);
+        copyStatus.textContent = ok
+          ? (language === 'zh' ? '已复制到剪贴板。' : 'Copied to clipboard.')
+          : (language === 'zh' ? '复制失败，请手动选择文本。' : 'Copy failed. Select the text manually.');
       }
 
       document.querySelectorAll('[data-type]').forEach(function (button) {
         button.addEventListener('click', function () {
+          if (type === button.dataset.type) return;
           type = button.dataset.type;
           render();
         });
@@ -182,6 +189,7 @@
 
       document.querySelectorAll('[data-agent]').forEach(function (button) {
         button.addEventListener('click', function () {
+          if (agent === button.dataset.agent) return;
           agent = button.dataset.agent;
           render();
         });
@@ -201,6 +209,7 @@
 
       document.querySelectorAll('[data-input]').forEach(function (button) {
         button.addEventListener('click', function () {
+          if (input === button.dataset.input) return;
           input = button.dataset.input;
           render();
         });
@@ -221,20 +230,16 @@
       document.querySelectorAll('[data-copy-source]').forEach(function (button) {
         button.addEventListener('click', function () {
           var step = button.dataset.copySource === 'install-command' ? 'global_install_copy' : 'project_install_copy';
-          copyText(document.getElementById(button.dataset.copySource).textContent.trim(), step);
+          copyText(step, button.getAttribute('aria-describedby'));
         });
       });
       document.getElementById('copy-prompt').addEventListener('click', function () {
-        copyText(currentPrompt(), 'prompt_copy');
+        copyText('prompt_copy', 'copy-status');
       });
       document.getElementById('copy-starter').addEventListener('click', function () {
-        copyText(starterText(), 'starter_copy');
+        copyText('starter_copy', 'copy-status');
       });
       proofLink.addEventListener('click', function () { recordStep('proof_open'); });
-      languageButton.addEventListener('click', function () {
-        language = language === 'zh' ? 'en' : 'zh';
-        render();
-      });
 
       render();
       recordStep('start_view');
